@@ -1,0 +1,120 @@
+import { Application, Loader } from 'pixi.js'
+import assets from "./assets"
+import { setTextures } from "./textures"
+import MainScene from "./mainScene"
+import StartScene from "./startScene"
+import Bus from "@/utils/bus"
+
+import { createAim } from "./tools"
+
+export default class Game {
+    constructor(option = {}) {
+        this.width = 1200;
+        this.height = 768;
+        this.el = document.querySelector('div');
+        this.resolution = 1;
+        this.onProgress = function () {}
+
+        Object.assign(this, option)
+        return this;
+    }
+
+    init() {
+        let { resolution, width, height, el } = this;
+
+        this.app = new Application({
+            width,
+            height,
+            backgroundColor: 0x00000,
+            resolution: resolution || 1,
+            antialias: true,
+            autoDensity: true,
+            preserveDrawingBuffer: true
+        })
+
+        this.app.renderer.plugins.interaction.cursorStyles.default = `none`;
+        this.app.renderer.plugins.interaction.cursorStyles.hover = `none`;
+        this.app.renderer.plugins.interaction.cursorStyles.pointer = `none`;
+    
+        el.appendChild(this.app.view);
+
+        this.stage = this.app.stage;
+        this.stage.sortableChildren = true;
+        this.stage.interactive = true;
+
+        this.loader = new Loader();
+
+        this.startScene = new StartScene(this);
+        this.stage.addChild(this.startScene.stage);
+
+        this.mainScene = new MainScene(this)
+        this.stage.addChild(this.mainScene.stage)
+
+        this.loaderTextures().then(res => {
+            Object.entries(res).forEach(([key, value]) => setTextures(key, value.texture))
+            this.render()
+        })
+
+        return this;
+    }
+
+    destroy() {
+        this.app.destroy(true, true)
+    }
+
+    loaderTextures() {
+        const { loader, onProgress } = this;
+        return new Promise((resolve, rejected) => {
+            Object.entries(assets).forEach(([key, value]) => loader.add(key, value, () => {
+                onProgress(loader.progress)
+            }))
+            loader.load((loader, resources) => {
+                onProgress(loader.progress)
+                resolve(resources)
+            })
+
+        })
+    }
+
+    render() {
+        this.draw();
+        this.update();
+    }
+
+    draw() {
+        this.addAim();
+        this.startScene.init();
+        Bus.$on('startGame', () => {
+            this.startScene.hide();
+            this.mainScene.init().show();
+        })
+    }
+
+    addAim() {
+        let aim = createAim({
+            x: -100,
+            y: -100
+        })
+
+        this.stage.on('pointermove', e => {
+            aim.position.copyFrom(e.data.global)
+        })
+
+        this.stage.on('pointerdown', e => {
+            aim.position.copyFrom(e.data.global)
+        })
+
+        this.stage.addChild(aim)
+    }
+
+    addTicker(event) {
+        this.event.push(event)
+    } 
+
+    update() {
+        this.app.ticker.add((delta) => {
+            this.startScene && this.startScene.update(delta);
+            this.mainScene && this.mainScene.update(delta);
+        })
+    }
+}
